@@ -22,6 +22,10 @@
 #include <string.h>
 #include "bt_utils.h"
 
+#if (BTM_WBS_INCLUDED == TRUE )
+#include "hci/include/hci_audio.h"
+#endif
+
 #define BTA_HF_CLIENT_NO_EDR_ESCO  (BTM_SCO_PKT_TYPES_MASK_NO_2_EV3 | \
                                     BTM_SCO_PKT_TYPES_MASK_NO_3_EV3 | \
                                     BTM_SCO_PKT_TYPES_MASK_NO_2_EV5 | \
@@ -77,6 +81,31 @@ enum
     BTA_HF_CLIENT_SCO_CONN_OPEN_E,     /* sco opened */
     BTA_HF_CLIENT_SCO_CONN_CLOSE_E,    /* sco closed */
 };
+
+/*******************************************************************************
+**
+** Function         bta_ag_co_audio_state
+**
+** Description      This function is called by the AG before the audio connection
+**                  is brought up, after it comes up, and after it goes down.
+**
+** Parameters       handle - handle of the AG instance
+**                  state - Audio state
+**                  codec - if WBS support is compiled in, codec to going to be used is provided
+**                      and when in SCO_STATE_SETUP, BTM_I2SPCMConfig() must be called with
+**                      the correct platform parameters.
+**                      in the other states codec type should not be ignored
+**
+** Returns          void
+**
+*******************************************************************************/
+#if (BTM_WBS_INCLUDED == TRUE )
+static void bta_hf_client_sco_audio_state(UINT16 handle, UINT8 state, tBTM_SCO_CODEC_TYPE codec)
+{
+    APPL_TRACE_DEBUG("%s [msbc_enabled:%d, negotiated_codec: 0x%x]", __FUNCTION__, bta_hf_client_cb.msbc_enabled, bta_hf_client_cb.scb.negotiated_codec);
+    set_audio_state(handle, codec, state);
+}
+#endif
 
 /*******************************************************************************
 **
@@ -153,6 +182,15 @@ static void bta_hf_client_sco_conn_rsp(tBTM_ESCO_CONN_REQ_EVT_DATA *p_data)
 
     if (bta_hf_client_cb.scb.sco_state == BTA_HF_CLIENT_SCO_LISTEN_ST)
     {
+#if (BTM_WBS_INCLUDED == TRUE )
+        if (bta_hf_client_cb.msbc_enabled == TRUE) {
+            bta_hf_client_sco_audio_state(bta_hf_client_cb.scb.sco_idx, SCO_STATE_SETUP, bta_hf_client_cb.scb.negotiated_codec);
+
+            if(bta_hf_client_cb.scb.negotiated_codec == BTM_SCO_CODEC_MSBC) {
+                BTM_WriteVoiceSettings (BTM_VOICE_SETTING_TRANS);
+            }
+        }
+#endif
         if (p_data->link_type == BTM_LINK_TYPE_SCO)
         {
             resp = bta_hf_client_esco_params[0];
@@ -604,7 +642,12 @@ void bta_hf_client_sco_shutdown(tBTA_HF_CLIENT_DATA *p_data)
     UNUSED(p_data);
 
     APPL_TRACE_DEBUG("%s", __FUNCTION__);
-
+#if (BTM_WBS_INCLUDED == TRUE)
+    if (bta_hf_client_cb.msbc_enabled == TRUE) {
+        bta_hf_client_sco_audio_state(bta_hf_client_cb.scb.sco_idx, SCO_STATE_OFF, BTM_SCO_CODEC_CVSD);
+        BTM_WriteVoiceSettings (BTM_VOICE_SETTING_CVSD);
+    }
+#endif
     bta_hf_client_sco_event(BTA_HF_CLIENT_SCO_SHUTDOWN_E);
 }
 
